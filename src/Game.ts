@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { PointerLockControls } from 'three/examples/jsm/controls/PointerLockControls';
 import Stats from 'three/examples/jsm/libs/stats.module';
 import { World } from './physics/World';
+import { DebugRenderer } from './DebugRenderer';
+import { CollisionStats } from './CollisionStats';
 
 export class Game {
     private scene: THREE.Scene;
@@ -11,6 +13,7 @@ export class Game {
     private world: World;
     private clock: THREE.Clock;
     private stats: Stats;
+    private collisionStats: CollisionStats;
 
     private raycaster: THREE.Raycaster;
     private center: THREE.Vector2;
@@ -28,7 +31,11 @@ export class Game {
     constructor() {
         // Setup Stats
         this.stats = new Stats();
+        this.stats.dom.style.display = 'none';
         document.body.appendChild(this.stats.dom);
+
+        // Setup Collision Stats
+        this.collisionStats = new CollisionStats();
 
         // Setup Scene
         this.scene = new THREE.Scene();
@@ -68,6 +75,9 @@ export class Game {
 
         // Handle Resize
         window.addEventListener('resize', () => this.onWindowResize());
+
+        // Setup Debug Renderer
+        this.debugRenderer = new DebugRenderer(this.scene, this.world);
     }
 
     private setupUI(): void {
@@ -101,6 +111,7 @@ export class Game {
                 case 'KeyA': this.moveState.left = false; break;
                 case 'KeyS': this.moveState.backward = false; break;
                 case 'KeyD': this.moveState.right = false; break;
+                case 'KeyP': this.toggleDebug(); break;
             }
         });
 
@@ -150,9 +161,9 @@ export class Game {
         }
     }
 
-    private createSphere(radius: number, position: THREE.Vector3, color: number) {
+    private createSphere(radius: number, position: THREE.Vector3, color: number, mass: number = 0) {
         // Physics
-        const body = this.world.addSphere(radius, position);
+        const body = this.world.addSphere(radius, position, mass || radius);
 
         // Graphics
         const geometry = new THREE.SphereGeometry(radius, 32, 32);
@@ -210,6 +221,19 @@ export class Game {
         this.animate();
     }
 
+    private debugMode: boolean = false;
+    private debugRenderer: DebugRenderer;
+
+    private toggleDebug(): void {
+        this.debugMode = !this.debugMode;
+
+        // Toggle Stats visibility
+        this.stats.dom.style.display = this.debugMode ? 'block' : 'none';
+        this.collisionStats.setVisible(this.debugMode);
+
+        this.debugRenderer.setEnabled(this.debugMode);
+    }
+
     private animate = (): void => {
         requestAnimationFrame(this.animate);
 
@@ -246,6 +270,13 @@ export class Game {
 
         // Apply physics
         this.world.update();
+
+        // Debug Update
+        this.debugRenderer.update();
+
+        // Update Collision Stats
+        this.collisionStats.update(this.world.collisionChecks);
+
         this.renderer.render(this.scene, this.camera);
     }
 }

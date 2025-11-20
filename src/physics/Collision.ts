@@ -14,27 +14,48 @@ export class Collision {
             const n = new THREE.Vector3().subVectors(a.position, b.position);
             const R = a.radius + b.radius;
 
-            if (n.lengthSq() < R * R) {
-                n.normalize();
+            const distSq = n.lengthSq();
+            if (distSq < R * R && distSq > 0) {
+                const dist = Math.sqrt(distSq);
+                n.multiplyScalar(1 / dist); // Normalize
 
+                // 1. Position Correction (Projection)
+                // Push bodies apart so they don't overlap
+                const overlap = R - dist;
+                const totalInvMass = a.invMass + b.invMass;
+
+                if (totalInvMass > 0) {
+                    const correction = n.clone().multiplyScalar(overlap / totalInvMass);
+                    if (!a.isGrabbed && a.type !== 1) a.position.add(correction.clone().multiplyScalar(a.invMass));
+                    if (!b.isGrabbed && b.type !== 1) b.position.sub(correction.clone().multiplyScalar(b.invMass));
+
+                    if (a.mesh) a.mesh.position.copy(a.position);
+                    if (b.mesh) b.mesh.position.copy(b.position);
+                }
+
+                // 2. Impulse Resolution
                 const vA = a.speed;
                 const vB = b.speed;
-
                 const a1 = vA.dot(n);
                 const a2 = vB.dot(n);
+                const relVel = a1 - a2;
+
+                // Do not resolve if velocities are separating
+                if (relVel > 0) return false;
 
                 const ma = a.mass;
                 const mb = b.mass;
-                const m = ma + mb;
 
                 // Impulse scalar
-                const P = 2 * (a1 - a2) / m;
+                // P = -(1 + e) * relVel / (1/ma + 1/mb)
+                // Assuming e (bounce) is average of both bodies
+                const e = (a.bounce + b.bounce) * 0.5;
 
-                const impulseA = n.clone().multiplyScalar(-b.mass * P);
-                const impulseB = n.clone().multiplyScalar(a.mass * P);
+                const impulseFactor = -(1 + e) * relVel / totalInvMass;
+                const impulse = n.clone().multiplyScalar(impulseFactor);
 
-                if (!a.isGrabbed) a.applyImpulse(impulseA);
-                if (!b.isGrabbed) b.applyImpulse(impulseB);
+                if (!a.isGrabbed) a.applyImpulse(impulse.clone().multiplyScalar(a.invMass));
+                if (!b.isGrabbed) b.applyImpulse(impulse.clone().multiplyScalar(-b.invMass));
 
                 return true;
             }
@@ -77,7 +98,7 @@ export class Collision {
 
             sphere.setSpeed(new THREE.Vector3(
                 friction * (sx - bounce * nx * sx),
-                sy - bounce * ny * sy,
+                friction * (sy - bounce * ny * sy),
                 friction * (sz - bounce * nz * sz)
             ));
 

@@ -2,8 +2,6 @@ import { Body } from './Body';
 import * as THREE from 'three';
 
 export class SphereBody extends Body {
-    public radius: number = 1;
-
     constructor(radius: number, position: THREE.Vector3 = new THREE.Vector3()) {
         super(position);
         this.radius = radius;

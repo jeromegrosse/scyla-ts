@@ -3,13 +3,20 @@ import { Body, EntityType } from './Body';
 import { Collision } from './Collision';
 import { SphereBody, PlaneBody } from './Shapes';
 
+import { SpatialHash } from './SpatialHash';
+
 export class World {
     public bodies: Body[] = [];
     public gravity: THREE.Vector3 | null = null;
     public gravityOn: boolean = false;
     public grabbedEntity: Body | null = null;
+    public collisionChecks: number = 0;
 
-    constructor() { }
+    private spatialHash: SpatialHash;
+
+    constructor() {
+        this.spatialHash = new SpatialHash(10); // Cell size 10
+    }
 
     public setGravity(gravity: THREE.Vector3): void {
         if (!this.gravityOn) {
@@ -41,22 +48,43 @@ export class World {
             body.applyForces();
         }
 
+        // Rebuild Spatial Hash
+        this.spatialHash.clear();
+        const dynamicBodies: Body[] = [];
+        const globalBodies: Body[] = [];
+
+        for (const body of this.bodies) {
+            if (body instanceof PlaneBody) {
+                globalBodies.push(body);
+            } else {
+                dynamicBodies.push(body);
+                this.spatialHash.insert(body);
+            }
+        }
+
         // Collision detection
-        let firstMoving = false;
-        for (let i = 0; i < this.bodies.length - 1; i++) {
-            const a = this.bodies[i];
-            firstMoving = a.isMoving();
+        this.collisionChecks = 0;
+        for (const a of dynamicBodies) {
+            // 1. Dynamic vs Dynamic (Optimized)
+            const candidates = this.spatialHash.query(a);
 
-            for (let j = i + 1; j < this.bodies.length; j++) {
-                const b = this.bodies[j];
-
-                if (firstMoving || b.isMoving()) {
-                    if (Collision.collide(a, b)) {
-                        // Collision resolved in collide method
-                        // Stop if very slow (friction/sleep)
-                        if (a.speed.lengthSq() < 1e-2) a.speed.set(0, 0, 0);
-                        if (b.speed.lengthSq() < 1e-2) b.speed.set(0, 0, 0);
+            for (const b of candidates) {
+                if (a.id < b.id) {
+                    if (a.isMoving() || b.isMoving()) {
+                        this.collisionChecks++;
+                        if (Collision.collide(a, b)) {
+                            if (a.speed.lengthSq() < 1e-2) a.speed.set(0, 0, 0);
+                            if (b.speed.lengthSq() < 1e-2) b.speed.set(0, 0, 0);
+                        }
                     }
+                }
+            }
+
+            // 2. Dynamic vs Static (Global/Plane)
+            for (const p of globalBodies) {
+                this.collisionChecks++;
+                if (Collision.collide(p, a)) {
+                    if (a.speed.lengthSq() < 1e-2) a.speed.set(0, 0, 0);
                 }
             }
         }
@@ -70,7 +98,7 @@ export class World {
         if (intersects.length > 0) {
             const object = intersects[0].object;
             const body = this.bodies.find(b => b.mesh === object);
-            if (body && body.type === EntityType.DYNAMIC_PICKABLE) {
+            if (body && body.type === EntityType.DYNAMIC) {
                 this.releaseEntity();
                 this.grabbedEntity = body;
                 body.grab();
@@ -101,5 +129,9 @@ export class World {
         const plane = new PlaneBody(width, length, new THREE.Vector3(0, 1, 0), position);
         this.addBody(plane);
         return plane;
+    }
+
+    public getSpatialHashDebugData(): { cellSize: number, keys: string[] } {
+        return this.spatialHash.getDebugData();
     }
 }
