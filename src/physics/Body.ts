@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 export enum EntityType {
-    DYNAMIC_PICKABLE,
+    DYNAMIC,
     STATIC
 }
 
@@ -11,17 +11,21 @@ export enum EntityState {
 }
 
 export class Body {
+    // Used to order the bodies so as to avoid doing double checks on the pair
+    private static nextId = 0;
+    public id: number;
+
     // Graphic attributes (managed externally or linked)
     public mesh: THREE.Mesh | null = null;
     public color: { r: number, g: number, b: number } = { r: 0, g: 0, b: 0 };
 
     // Physic attributes
-    public mass: number = 2;
-    public invMass: number = 1 / 2;
-    public bounce: number = 1.7;
-    public dumping: number = 0.5;
+    public mass: number = 1.0;
+    public invMass: number = 1.0;
+    public bounce: number = 0.8;
+    public radius: number = 0;
 
-    public type: EntityType = EntityType.DYNAMIC_PICKABLE;
+    public type: EntityType = EntityType.DYNAMIC;
     public state: EntityState = EntityState.MOVING;
     public isGrabbed: boolean = false;
 
@@ -31,6 +35,7 @@ export class Body {
     public gravity: THREE.Vector3 | null = null;
 
     constructor(position: THREE.Vector3 = new THREE.Vector3()) {
+        this.id = Body.nextId++;
         this.position.copy(position);
     }
 
@@ -52,7 +57,7 @@ export class Body {
     }
 
     public enableDynamic(): void {
-        this.type = EntityType.DYNAMIC_PICKABLE;
+        this.type = EntityType.DYNAMIC;
     }
 
     public disableDynamic(): void {
